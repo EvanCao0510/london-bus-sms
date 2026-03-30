@@ -265,6 +265,35 @@
       padding: 2px 7px;
       margin-top: 3px;
     }
+
+    /* Bus line pills */
+    .lines-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 10px;
+    }
+    .line-pill {
+      background: #1d3557;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 6px;
+      letter-spacing: 0.2px;
+    }
+    .line-pill.night { background: #0a1628; }
+
+    /* Towards row */
+    .towards-row {
+      font-size: 13px;
+      color: var(--sub);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .towards-row strong { color: var(--text); }
   </style>
 </head>
 <body>
@@ -472,8 +501,9 @@ async function toggleCard(id, encodedName) {
 
     // smsCode is a top-level field on individual bus stops
     if (data.smsCode) {
-      smsCache[id] = data.smsCode;
-      panel.innerHTML = smsCodeHtml(data.smsCode);
+      const info = extractStopInfo(data);
+      smsCache[id] = info;
+      panel.innerHTML = smsCodeHtml(info);
       return;
     }
 
@@ -485,19 +515,15 @@ async function toggleCard(id, encodedName) {
         busKids.slice(0, 6).map(c =>
           fetch(`${TFL}/StopPoint/${c.naptanId}`)
             .then(r => r.json())
-            .then(d => d.smsCode ? {
-              letter: d.stopLetter || d.indicator || '',
-              towards: (d.additionalProperties || []).find(p => p.key === 'Towards')?.value || '',
-              smsCode: d.smsCode
-            } : null)
+            .then(d => d.smsCode ? extractStopInfo(d) : null)
             .catch(() => null)
         )
       );
       const valid = details.filter(Boolean);
       if (valid.length > 0) {
-        smsCache[id] = valid[0].smsCode;
+        smsCache[id] = valid[0];
         panel.innerHTML = valid.length === 1
-          ? smsCodeHtml(valid[0].smsCode)
+          ? smsCodeHtml(valid[0])
           : multiStopHtml(valid);
         return;
       }
@@ -508,6 +534,22 @@ async function toggleCard(id, encodedName) {
   } catch (e) {
     panel.innerHTML = `<div class="no-code-msg">Could not load stop code</div>`;
   }
+}
+
+function extractStopInfo(d) {
+  return {
+    smsCode: d.smsCode,
+    letter:  d.stopLetter || d.indicator || '',
+    towards: (d.additionalProperties || []).find(p => p.key === 'Towards')?.value || '',
+    lines:   (d.lines || []).map(l => l.name).sort((a, b) => sortLine(a) - sortLine(b))
+  };
+}
+
+function sortLine(name) {
+  // Night buses (N...) last, then numeric sort
+  if (/^n/i.test(name)) return 10000 + parseInt(name.slice(1)) || 9999;
+  const n = parseInt(name);
+  return isNaN(n) ? 5000 + name.charCodeAt(0) : n;
 }
 
 // Collect all NaptanPublicBusCoachTram leaf children from a group stop
@@ -525,27 +567,31 @@ function collectBusChildren(stop) {
 }
 
 // ── SMS code HTML ─────────────────────────────────────────
-function smsCodeHtml(code) {
+function smsCodeHtml(info) {
+  const { smsCode, towards, lines = [] } = info;
   return `
+  ${towards ? `<div class="towards-row">→ Towards <strong>${escHtml(towards)}</strong></div>` : ''}
   <div class="sms-code-row">
     <div class="sms-code-info">
       <div class="sms-code-label">SMS code</div>
-      <div class="sms-code-value">${escHtml(code)}</div>
+      <div class="sms-code-value">${escHtml(smsCode)}</div>
     </div>
-    <a class="btn-sms" href="sms:87287&body=${encodeURIComponent(code)}" onclick="trackSend()">
+    <a class="btn-sms" href="sms:87287&body=${encodeURIComponent(smsCode)}" onclick="trackSend()">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
       Text 87287
     </a>
-  </div>`;
+  </div>
+  ${lines.length ? `<div class="lines-wrap">${lines.map(l => `<span class="line-pill${/^n/i.test(l) ? ' night' : ''}">${escHtml(l)}</span>`).join('')}</div>` : ''}`;
 }
 
 function multiStopHtml(stops) {
-  return stops.map(s => `
-  <div style="border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:10px;">
-    ${s.letter ? `<div style="font-size:11px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Stop ${escHtml(s.letter)}${s.towards ? ' · towards ' + escHtml(s.towards) : ''}</div>` : ''}
-    <div class="sms-code-row" style="margin-top:4px;">
+  return stops.map((s, i) => `
+  <div style="${i < stops.length-1 ? 'border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px;' : ''}">
+    ${s.letter ? `<div style="font-size:11px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;">Stop ${escHtml(s.letter)}</div>` : ''}
+    ${s.towards ? `<div class="towards-row">→ Towards <strong>${escHtml(s.towards)}</strong></div>` : ''}
+    <div class="sms-code-row">
       <div class="sms-code-info">
         <div class="sms-code-label">SMS code</div>
         <div class="sms-code-value">${escHtml(s.smsCode)}</div>
@@ -557,6 +603,7 @@ function multiStopHtml(stops) {
         Text 87287
       </a>
     </div>
+    ${s.lines && s.lines.length ? `<div class="lines-wrap">${s.lines.map(l => `<span class="line-pill${/^n/i.test(l) ? ' night' : ''}">${escHtml(l)}</span>`).join('')}</div>` : ''}
   </div>`).join('');
 }
 
