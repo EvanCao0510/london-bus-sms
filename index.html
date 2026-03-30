@@ -515,7 +515,12 @@ async function toggleCard(id, encodedName) {
         busKids.slice(0, 6).map(c =>
           fetch(`${TFL}/StopPoint/${c.naptanId}`)
             .then(r => r.json())
-            .then(d => d.smsCode ? extractStopInfo(d) : null)
+            .then(d => d.smsCode ? {
+              ...extractStopInfo(d),
+              // Prefer inline metadata (towards/letter) from parent — more reliable
+              letter:  c.letter  || d.stopLetter || d.indicator || '',
+              towards: c.towards || (d.additionalProperties || []).find(p => p.key === 'Towards')?.value || '',
+            } : null)
             .catch(() => null)
         )
       );
@@ -552,12 +557,18 @@ function sortLine(name) {
   return isNaN(n) ? 5000 + name.charCodeAt(0) : n;
 }
 
-// Collect all NaptanPublicBusCoachTram leaf children from a group stop
+// Collect all NaptanPublicBusCoachTram leaf children, preserving inline metadata
 function collectBusChildren(stop) {
   const results = [];
   function walk(node) {
     if (node.stopType === 'NaptanPublicBusCoachTram') {
-      results.push(node);
+      const props = node.additionalProperties || [];
+      results.push({
+        naptanId: node.naptanId,
+        letter:   node.stopLetter || node.indicator || '',
+        towards:  (props.find(p => p.key === 'Towards') || {}).value || '',
+        compass:  (props.find(p => p.key === 'CompassPoint') || {}).value || '',
+      });
     } else {
       (node.children || []).forEach(walk);
     }
