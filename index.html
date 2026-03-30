@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bus SMS">
+  <link rel="apple-touch-icon" href="icon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>London Bus SMS</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --red: #E1251B;
+      --dark: #1a1a2e;
+      --card: #ffffff;
+      --bg: #f4f4f8;
+      --text: #1a1a2e;
+      --sub: #6b7280;
+      --border: #e5e7eb;
+      --radius: 14px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* Header */
+    header {
+      background: var(--red);
+      color: white;
+      padding: 52px 20px 18px;
+      padding-top: max(52px, calc(44px + env(safe-area-inset-top)));
+    }
+    header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    header p {
+      font-size: 13px;
+      opacity: 0.85;
+      margin-top: 3px;
+    }
+
+    /* Search bar */
+    .search-wrap {
+      background: var(--red);
+      padding: 0 16px 16px;
+    }
+    .search-box {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: white;
+      border-radius: 12px;
+      padding: 0 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .search-box svg { flex-shrink: 0; color: var(--sub); }
+    .search-box input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 16px;
+      padding: 13px 4px;
+      background: transparent;
+      color: var(--text);
+    }
+    .search-box input::placeholder { color: #aaa; }
+    #clearBtn {
+      background: none;
+      border: none;
+      padding: 4px;
+      cursor: pointer;
+      color: var(--sub);
+      display: none;
+    }
+
+    /* Nearby button */
+    .actions {
+      padding: 14px 16px 6px;
+      display: flex;
+      gap: 8px;
+    }
+    .btn-nearby {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text);
+      transition: background 0.15s;
+    }
+    .btn-nearby:active { background: #f0f0f0; }
+    .btn-nearby svg { color: var(--red); }
+
+    /* Section label */
+    .section-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--sub);
+      padding: 12px 16px 6px;
+    }
+
+    /* Stop list */
+    .stop-list {
+      padding: 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-bottom: 24px;
+    }
+
+    .stop-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      overflow: hidden;
+    }
+
+    .stop-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .stop-main:active { background: #f9f9f9; }
+
+    .stop-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--red);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 700;
+      flex-shrink: 0;
+      letter-spacing: -0.5px;
+    }
+
+    .stop-info { flex: 1; min-width: 0; }
+    .stop-name {
+      font-size: 15px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .stop-sub {
+      font-size: 12px;
+      color: var(--sub);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .stop-arrow {
+      color: #ccc;
+      flex-shrink: 0;
+    }
+
+    /* SMS panel (revealed below stop-main) */
+    .sms-panel {
+      display: none;
+      border-top: 1px solid var(--border);
+      padding: 12px 14px;
+      background: #fafafa;
+    }
+    .sms-panel.visible { display: block; }
+
+    .sms-panel .loading {
+      font-size: 13px;
+      color: var(--sub);
+      text-align: center;
+      padding: 4px 0;
+    }
+
+    .sms-code-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .sms-code-info { flex: 1; }
+    .sms-code-label { font-size: 11px; color: var(--sub); font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; }
+    .sms-code-value {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text);
+      margin-top: 2px;
+    }
+
+    .btn-sms {
+      background: var(--red);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .btn-sms:active { opacity: 0.8; }
+
+    .no-code-msg {
+      font-size: 13px;
+      color: var(--sub);
+      text-align: center;
+      padding: 4px 0;
+    }
+
+    /* States */
+    .state-box {
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--sub);
+    }
+    .state-box svg { margin-bottom: 12px; opacity: 0.4; }
+    .state-box p { font-size: 15px; }
+    .state-box small { font-size: 13px; opacity: 0.7; display: block; margin-top: 6px; }
+
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--red);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Distance pill */
+    .dist-pill {
+      display: inline-block;
+      background: #f0f0f0;
+      border-radius: 20px;
+      font-size: 11px;
+      color: var(--sub);
+      padding: 2px 7px;
+      margin-top: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🚌 London Bus SMS</h1>
+  <p>Find a stop · Text 87287 · Get live times</p>
+</header>
+
+<div class="search-wrap">
+  <div class="search-box">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input type="search" id="searchInput" placeholder="Search bus stop name…" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button id="clearBtn" aria-label="Clear">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path d="M18 6 6 18M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn-nearby" id="nearbyBtn">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+    </svg>
+    Nearby stops
+  </button>
+</div>
+
+<div id="main">
+  <div class="state-box">
+    <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="18" height="13" rx="2"/>
+      <path d="M3 8h18M8 21h8M12 16v5"/>
+    </svg>
+    <p>Search for a bus stop</p>
+    <small>or tap "Nearby stops" to find stops around you</small>
+  </div>
+</div>
+
+<script>
+const TFL = 'https://api.tfl.gov.uk';
+const smsCache = {};   // naptanId → smsCode string (or null)
+let debounceTimer;
+let openCardId = null;
+
+// ── DOM refs ──────────────────────────────────────────────
+const input     = document.getElementById('searchInput');
+const clearBtn  = document.getElementById('clearBtn');
+const nearbyBtn = document.getElementById('nearbyBtn');
+const main      = document.getElementById('main');
+
+// ── Search ────────────────────────────────────────────────
+input.addEventListener('input', () => {
+  const q = input.value.trim();
+  clearBtn.style.display = q ? 'block' : 'none';
+  clearTimeout(debounceTimer);
+  if (q.length < 2) {
+    if (!q) showIdle();
+    return;
+  }
+  debounceTimer = setTimeout(() => doSearch(q), 350);
+});
+
+clearBtn.addEventListener('click', () => {
+  input.value = '';
+  clearBtn.style.display = 'none';
+  openCardId = null;
+  showIdle();
+  input.focus();
+});
+
+async function doSearch(q) {
+  showLoading();
+  try {
+    const url = `${TFL}/StopPoint/Search/${encodeURIComponent(q)}?modes=bus&maxResults=10`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    renderStops(data.matches || [], null);
+  } catch (e) {
+    showError('Could not load results. Check your connection.');
+  }
+}
+
+// ── Nearby ────────────────────────────────────────────────
+nearbyBtn.addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    alert('Geolocation is not supported on this device.');
+    return;
+  }
+  showLoading('Getting your location…');
+  navigator.geolocation.getCurrentPosition(
+    pos => loadNearby(pos.coords.latitude, pos.coords.longitude),
+    () => showError('Location access denied. Please allow location in Settings.'),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+async function loadNearby(lat, lon) {
+  showLoading('Finding nearby stops…');
+  try {
+    const url = `${TFL}/StopPoint/?lat=${lat}&lon=${lon}&stopTypes=NaptanPublicBusCoachTram&radius=500&modes=bus`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    const stops = (data.stopPoints || []).slice(0, 12);
+
+    // Extract sms codes from full stop objects & cache them
+    stops.forEach(s => {
+      const prop = (s.additionalProperties || []).find(p => p.key === 'Sms_Code');
+      if (prop) smsCache[s.naptanId] = prop.value;
+      // Also try children
+      if (s.children) s.children.forEach(c => {
+        const cp = (c.additionalProperties || []).find(p => p.key === 'Sms_Code');
+        if (cp) smsCache[c.naptanId] = cp.value;
+      });
+    });
+
+    renderStops(stops, { lat, lon });
+  } catch (e) {
+    showError('Could not load nearby stops. Check your connection.');
+  }
+}
+
+// ── Render ────────────────────────────────────────────────
+function renderStops(stops, userCoords) {
+  if (!stops.length) {
+    main.innerHTML = `<div class="state-box"><p>No bus stops found</p><small>Try a different search term</small></div>`;
+    return;
+  }
+
+  const label = userCoords ? 'Nearby stops' : `${stops.length} result${stops.length > 1 ? 's' : ''}`;
+
+  let html = `<div class="section-label">${label}</div><div class="stop-list">`;
+
+  stops.forEach(stop => {
+    const id   = stop.naptanId || stop.id;
+    const name = stop.commonName || stop.name || 'Unknown stop';
+    const indicator = stop.stopLetter || stop.indicator || '';
+    const towards  = stop.towards || '';
+    const area     = stop.place?.name || stop.zone || '';
+
+    let sub = '';
+    if (towards) sub = `Towards ${towards}`;
+    else if (area) sub = area;
+
+    let distHtml = '';
+    if (userCoords && stop.lat && stop.lon) {
+      const d = haversine(userCoords.lat, userCoords.lon, stop.lat, stop.lon);
+      distHtml = `<span class="dist-pill">${d < 1000 ? Math.round(d) + ' m' : (d/1000).toFixed(1) + ' km'}</span>`;
+    }
+
+    // If we already cached the code, show it inline
+    const cachedCode = smsCache[id];
+
+    html += `
+    <div class="stop-card" id="card-${id}">
+      <div class="stop-main" onclick="toggleCard('${id}','${encodeURIComponent(name)}')">
+        <div class="stop-badge">${indicator ? escHtml(indicator) : '🚌'}</div>
+        <div class="stop-info">
+          <div class="stop-name">${escHtml(name)}</div>
+          <div class="stop-sub">${escHtml(sub)}${distHtml}</div>
+        </div>
+        <svg class="stop-arrow" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="m9 18 6-6-6-6"/>
+        </svg>
+      </div>
+      <div class="sms-panel" id="panel-${id}">
+        ${cachedCode
+          ? smsCodeHtml(cachedCode)
+          : `<div class="loading">Loading stop code…</div>`}
+      </div>
+    </div>`;
+  });
+
+  html += '</div>';
+  main.innerHTML = html;
+}
+
+// ── Toggle card ───────────────────────────────────────────
+async function toggleCard(id, encodedName) {
+  const panel = document.getElementById(`panel-${id}`);
+  if (!panel) return;
+
+  const isOpen = panel.classList.contains('visible');
+
+  // Close any other open panel
+  if (openCardId && openCardId !== id) {
+    const prev = document.getElementById(`panel-${openCardId}`);
+    if (prev) prev.classList.remove('visible');
+  }
+
+  if (isOpen) {
+    panel.classList.remove('visible');
+    openCardId = null;
+    return;
+  }
+
+  panel.classList.add('visible');
+  openCardId = id;
+
+  // If already cached, nothing to do
+  if (smsCache.hasOwnProperty(id)) {
+    panel.innerHTML = smsCache[id] ? smsCodeHtml(smsCache[id]) : noCodeHtml();
+    return;
+  }
+
+  // Fetch stop details
+  try {
+    const res = await fetch(`${TFL}/StopPoint/${id}`);
+    const data = await res.json();
+
+    let code = null;
+
+    // Try on the stop itself
+    const prop = (data.additionalProperties || []).find(p => p.key === 'Sms_Code');
+    if (prop) code = prop.value;
+
+    // If this is a group (490G...), look in children
+    if (!code && data.children) {
+      for (const child of data.children) {
+        const cp = (child.additionalProperties || []).find(p => p.key === 'Sms_Code');
+        if (cp) { code = cp.value; break; }
+      }
+    }
+
+    smsCache[id] = code || null;
+    panel.innerHTML = code ? smsCodeHtml(code) : noCodeHtml();
+  } catch (e) {
+    panel.innerHTML = `<div class="no-code-msg">Could not load stop code</div>`;
+  }
+}
+
+// ── SMS code HTML ─────────────────────────────────────────
+function smsCodeHtml(code) {
+  return `
+  <div class="sms-code-row">
+    <div class="sms-code-info">
+      <div class="sms-code-label">SMS code</div>
+      <div class="sms-code-value">${escHtml(code)}</div>
+    </div>
+    <a class="btn-sms" href="sms:87287?body=${encodeURIComponent(code)}" onclick="trackSend()">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      Text 87287
+    </a>
+  </div>`;
+}
+
+function noCodeHtml() {
+  return `<div class="no-code-msg">No SMS code found for this stop</div>`;
+}
+
+function trackSend() {
+  // nothing — just a hook if you want analytics later
+}
+
+// ── UI states ─────────────────────────────────────────────
+function showIdle() {
+  main.innerHTML = `
+  <div class="state-box">
+    <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="18" height="13" rx="2"/>
+      <path d="M3 8h18M8 21h8M12 16v5"/>
+    </svg>
+    <p>Search for a bus stop</p>
+    <small>or tap "Nearby stops" to find stops around you</small>
+  </div>`;
+}
+
+function showLoading(msg = 'Searching…') {
+  main.innerHTML = `<div class="state-box"><div class="spinner"></div><p>${msg}</p></div>`;
+}
+
+function showError(msg) {
+  main.innerHTML = `<div class="state-box"><p>⚠️ ${msg}</p></div>`;
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+</script>
+</body>
+</html>

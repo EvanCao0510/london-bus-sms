@@ -1,0 +1,17 @@
+{
+  "name": "London Bus SMS",
+  "short_name": "Bus SMS",
+  "description": "Find London bus stop codes and text 87287 for live arrivals",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E1251B",
+  "theme_color": "#E1251B",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
