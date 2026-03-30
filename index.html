@@ -376,17 +376,6 @@ async function loadNearby(lat, lon) {
     const data = await res.json();
     const stops = (data.stopPoints || []).slice(0, 12);
 
-    // Extract sms codes from full stop objects & cache them
-    stops.forEach(s => {
-      const prop = (s.additionalProperties || []).find(p => p.key === 'Sms_Code');
-      if (prop) smsCache[s.naptanId] = prop.value;
-      // Also try children
-      if (s.children) s.children.forEach(c => {
-        const cp = (c.additionalProperties || []).find(p => p.key === 'Sms_Code');
-        if (cp) smsCache[c.naptanId] = cp.value;
-      });
-    });
-
     renderStops(stops, { lat, lon });
   } catch (e) {
     showError('Could not load nearby stops. Check your connection.');
@@ -481,25 +470,58 @@ async function toggleCard(id, encodedName) {
     const res = await fetch(`${TFL}/StopPoint/${id}`);
     const data = await res.json();
 
-    let code = null;
+    // smsCode is a top-level field on individual bus stops
+    if (data.smsCode) {
+      smsCache[id] = data.smsCode;
+      panel.innerHTML = smsCodeHtml(data.smsCode);
+      return;
+    }
 
-    // Try on the stop itself
-    const prop = (data.additionalProperties || []).find(p => p.key === 'Sms_Code');
-    if (prop) code = prop.value;
-
-    // If this is a group (490G...), look in children
-    if (!code && data.children) {
-      for (const child of data.children) {
-        const cp = (child.additionalProperties || []).find(p => p.key === 'Sms_Code');
-        if (cp) { code = cp.value; break; }
+    // Hub/group stop — drill into children to find individual bus stops with smsCode
+    const busKids = collectBusChildren(data);
+    if (busKids.length > 0) {
+      // Fetch each child individually (smsCode not included inline)
+      const details = await Promise.all(
+        busKids.slice(0, 6).map(c =>
+          fetch(`${TFL}/StopPoint/${c.naptanId}`)
+            .then(r => r.json())
+            .then(d => d.smsCode ? {
+              letter: d.stopLetter || d.indicator || '',
+              towards: (d.additionalProperties || []).find(p => p.key === 'Towards')?.value || '',
+              smsCode: d.smsCode
+            } : null)
+            .catch(() => null)
+        )
+      );
+      const valid = details.filter(Boolean);
+      if (valid.length > 0) {
+        smsCache[id] = valid[0].smsCode;
+        panel.innerHTML = valid.length === 1
+          ? smsCodeHtml(valid[0].smsCode)
+          : multiStopHtml(valid);
+        return;
       }
     }
 
-    smsCache[id] = code || null;
-    panel.innerHTML = code ? smsCodeHtml(code) : noCodeHtml();
+    smsCache[id] = null;
+    panel.innerHTML = noCodeHtml();
   } catch (e) {
     panel.innerHTML = `<div class="no-code-msg">Could not load stop code</div>`;
   }
+}
+
+// Collect all NaptanPublicBusCoachTram leaf children from a group stop
+function collectBusChildren(stop) {
+  const results = [];
+  function walk(node) {
+    if (node.stopType === 'NaptanPublicBusCoachTram') {
+      results.push(node);
+    } else {
+      (node.children || []).forEach(walk);
+    }
+  }
+  (stop.children || []).forEach(walk);
+  return results;
 }
 
 // ── SMS code HTML ─────────────────────────────────────────
@@ -510,13 +532,32 @@ function smsCodeHtml(code) {
       <div class="sms-code-label">SMS code</div>
       <div class="sms-code-value">${escHtml(code)}</div>
     </div>
-    <a class="btn-sms" href="sms:87287?body=${encodeURIComponent(code)}" onclick="trackSend()">
+    <a class="btn-sms" href="sms:87287&body=${encodeURIComponent(code)}" onclick="trackSend()">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
       </svg>
       Text 87287
     </a>
   </div>`;
+}
+
+function multiStopHtml(stops) {
+  return stops.map(s => `
+  <div style="border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:10px;">
+    ${s.letter ? `<div style="font-size:11px;color:var(--sub);font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">Stop ${escHtml(s.letter)}${s.towards ? ' · towards ' + escHtml(s.towards) : ''}</div>` : ''}
+    <div class="sms-code-row" style="margin-top:4px;">
+      <div class="sms-code-info">
+        <div class="sms-code-label">SMS code</div>
+        <div class="sms-code-value">${escHtml(s.smsCode)}</div>
+      </div>
+      <a class="btn-sms" href="sms:87287&body=${encodeURIComponent(s.smsCode)}">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        Text 87287
+      </a>
+    </div>
+  </div>`).join('');
 }
 
 function noCodeHtml() {
